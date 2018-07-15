@@ -30,33 +30,6 @@
 /* Given a hash value and a new character, return a new hash value.  */
 #define HASH(h, c) ((c) + ROL (h, 7))
 
-/* The type of a hash value.  */
-typedef size_t hash_value;
-verify (hash_value_is_unsigned, ! TYPE_SIGNED (hash_value));
-
-/* Lines are put into equivalence classes of lines that match in lines_differ.
-   Each equivalence class is represented by one of these structures,
-   but only while the classes are being computed.
-   Afterward, each class is represented by a number.  */
-struct equivclass
-{
-  lin next;		/* Next item in this bucket.  */
-  hash_value hash;	/* Hash of lines in this class.  */
-  const QChar *line;	/* A line that fits this class.  */
-  size_t length;	/* That line's length, not counting its newline.  */
-};
-
-/* Hash-table: array of buckets, each being a chain of equivalence classes.
-   buckets[-1] is reserved for incomplete lines.  */
-static lin *buckets;
-
-/* Number of buckets in the hash table array, not counting buckets[-1].  */
-static size_t nbuckets;
-
-/* Array in which the equivalence classes are allocated.
-   The bucket-chains go through the elements in this array.
-   The number of an equivalence class is its index in this array.  */
-static struct equivclass *equivs;
 
 /* Index of first free element in the array `equivs'.  */
 static lin equivs_index;
@@ -68,6 +41,29 @@ static lin equivs_alloc;
 
 /* Return 1 if BUF contains a non text character.
    SIZE is the number of characters in BUF.  */
+
+
+
+#include <kparts/part.h>
+#include <kparts/factory.h>
+
+class QWidget;
+class KDiff3App;
+
+/**
+ * This is a "Part".  It that does all the real work in a KPart
+ * application.
+ *
+ * @short Main Part
+ * @author Joachim Eibl <joachim.eibl at gmx.de>
+ */
+class KDiff3Part : public KParts::ReadWritePart
+{
+    Q_OBJECT
+public:
+    /**
+     * Default constructor
+
 
 #define binary_file_p(buf, size) (memchr (buf, 0, size) != 0)
 
@@ -85,16 +81,6 @@ bool GnuDiff::lines_differ (const QChar *s1, size_t len1, const QChar *s2, size_
    const QChar *s2end = s2+len2;
 
    for ( ; ; ++t1, ++t2 )
-   {
-      /* Test for exact char equality first, since it's a common case.  */
-      if ( t1!=s1end && t2!=s2end && *t1==*t2 )
-         continue;
-      else
-      {
-         while ( t1!=s1end &&
-                 ( (bIgnoreWhiteSpace && isWhite( *t1 ))  ||
-                   (bIgnoreNumbers    && (t1->isDigit()  || *t1=='-' || *t1=='.' ))))
-         {
             ++t1;
          }
 
@@ -104,6 +90,20 @@ bool GnuDiff::lines_differ (const QChar *s1, size_t len1, const QChar *s2, size_
          {
             ++t2;
          }
+
+    virtual void setModified(bool modified);
+
+protected:
+    /**
+     * This must be implemented by each part
+     */
+    virtual bool openFile();
+
+    /**
+     * This must be implemented by each read-write part
+     */
+    virtual bool saveFile();
+
 
          if ( t1!=s1end && t2!=s2end )
          {
