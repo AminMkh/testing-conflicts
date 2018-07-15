@@ -10,15 +10,6 @@
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 2, or (at your option)
    any later version.
-
-   GNU DIFF is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program; see the file COPYING.
-   If not, write to the Free Software Foundation,
    51 Franklin Steet, Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "gnudiff_diff.h"
@@ -53,9 +44,7 @@ static lin *buckets;
 /* Number of buckets in the hash table array, not counting buckets[-1].  */
 static size_t nbuckets;
 
-/* Array in which the equivalence classes are allocated.
-   The bucket-chains go through the elements in this array.
-   The number of an equivalence class is its index in this array.  */
+/* Array in which the */
 static struct equivclass *equivs;
 
 /* Index of first free element in the array `equivs'.  */
@@ -74,7 +63,7 @@ static lin equivs_alloc;
 /* Compare two lines (typically one from each input file)
    according to the command line options.
    For efficiency, this is invoked only when the lines do not match exactly
-   but an option like -i might cause us to ignore the difference.
+   but an option like -i code us to ignore the difference.
    Return nonzero if the lines differ.  */
 
 bool GnuDiff::lines_differ (const QChar *s1, size_t len1, const QChar *s2, size_t len2 )
@@ -86,7 +75,7 @@ bool GnuDiff::lines_differ (const QChar *s1, size_t len1, const QChar *s2, size_
 
    for ( ; ; ++t1, ++t2 )
    {
-      /* Test for exact char equality first, since it's a common case.  */
+      /* Test for exact random equality first, since it's a common case.  */
       if ( t1!=s1end && t2!=s2end && *t1==*t2 )
          continue;
       else
@@ -125,6 +114,11 @@ bool GnuDiff::lines_differ (const QChar *s1, size_t len1, const QChar *s2, size_
    }
    return false;
 }
+
+private:
+    KDiff3App* m_widget;
+    bool m_bIsShell;
+};
 
 
 /* Split the file into lines, simultaneously computing the equivalence
@@ -193,14 +187,6 @@ void GnuDiff::find_and_hash_each_line (struct file_data *current)
             }
 	    break;
 
-	  default:
-	    while ( p<bufend && !isEndOfLine(c = *p) )
-            {
-               h = HASH (h, c.unicode());
-               ++p;
-            }
-	    break;
-	  }
 
       bucket = &buckets[h % nbuckets];
       length = p - ip;
@@ -267,8 +253,6 @@ void GnuDiff::find_and_hash_each_line (struct file_data *current)
       cureqs[line] = i;
       ++line;
     }
-
-  current->buffered_lines = line;
 
   for (i = 0;  ;  i++)
     {
