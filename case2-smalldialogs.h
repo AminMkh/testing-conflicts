@@ -28,6 +28,9 @@ class QComboBox;
 class QCheckBox;
 class QLineEdit;
 
+// Comment added by Amin!
+// case2 code changes
+
 class OpenDialog : public QDialog
 {
    Q_OBJECT
