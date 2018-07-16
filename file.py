@@ -6,7 +6,7 @@ from xmltodict import parse
 from helpers.git_cli_client import GitCliClient, GIT_TEMP_DIRECTORY
 from helpers.kdiff3 import KDiff3
 from helpers.requests import response, check_args_have
-from models.data_model import DB_SESSION
+from models.data_model import DB_SESSION, DB_S2
 from models.file import update_assignee, File
 from models.session import transform_file
 from models.user import User
@@ -21,14 +21,14 @@ def assign_file(kwargs):
     """
 
     # Todo: add authorization
+
     required_args = ['logged_user', 'session_id', 'file_id', 'user_id']
     if not check_args_have(kwargs, required_args):
         return response(400, 'Invalid input')
 
-    DB_SESSION.commit()
+    DB_SESSION.commit() // make a DB commit
 
     try:
-        print(kwargs)
         if update_assignee(kwargs['logged_user'], kwargs['session_id'],
                            kwargs['file_id'], kwargs['user_id']):
             file = DB_SESSION.query(File).filter(File.id == kwargs['file_id']).one()
@@ -40,6 +40,19 @@ def assign_file(kwargs):
         logger.error('Can not assign users within the database')
         print(identifier)
         return response(500, 'Error has occurred while assigning the file')
+
+
+
+def xml_to_json(xml_content):
+    try:
+        arr = parse(xml_content)
+
+    except Exception as e:
+        print('error converting from XML to dict')
+        print(str(e))
+        return False
+
+    return arr
 
 
 def show(file_id, session_id, kwargs):
@@ -77,17 +90,6 @@ def show(file_id, session_id, kwargs):
     new_output_file = temp_directory + file.relative_path + "_A"
     a = GitCliClient.get_base_file(session, base_commit_id, file.relative_path, new_output_file)
 
-    if not a:  # file didn't exist in base branch!
-        a = new_output_file
-        Path(a).touch()
-
-    b = GitCliClient.get_show_file(
-        session, "from", session.from_branch_name, file.relative_path, "B")
-    c = GitCliClient.get_show_file(
-        session, "to", session.to_branch_name, file.relative_path, "C")
-    output_path = session.containing_dir + "/" + \
-                  GIT_TEMP_DIRECTORY + "/" + file.relative_path + ".xml"
-
     # run KDiff3
     kdiff_postfix = KDiff3.run(a, b, c, output_path)
     kdiff_content = KDiff3.get_content(output_path)
@@ -109,13 +111,39 @@ def show(file_id, session_id, kwargs):
     return response(200, 'OK', result)
 
 
-def xml_to_json(xml_content):
-    try:
-        arr = parse(xml_content)
+def handle_get_merge_sessions(kwargs):
+    """
+    Handles {GET} merge_sessions/... requests
+    """
+    # GET: /merge_sessions
+    if not kwargs['nested'] or not len(kwargs['nested']):
+        return index(kwargs)
 
-    except Exception as e:
-        print('error converting from XML to dict')
-        print(str(e))
-        return False
+    # GET: /merge_sessions/{session_id}
+    if len(kwargs['nested']) == 1 and \
+            isInt(kwargs['nested'][0]):
+        kwargs['session_id'] = int(kwargs['nested'][0])
+        return show(kwargs)
 
-    return arr
+    # Handles {GET} merge_sessions/{id}/file/{id}
+    if (len(kwargs['nested']) == 3 and
+            isInt(kwargs['nested'][0]) and
+            kwargs['nested'][1] == 'files'):
+        kwargs['session_id'] = int(kwargs['nested'][0])
+        kwargs['file_id'] = int(kwargs['nested'][2])
+
+        return controllers._file.show(kwargs['file_id'], kwargs['session_id'], kwargs)
+
+    # Handles {GET} merge_sessions/{id}/logs/
+    if (len(kwargs['nested']) == 2 and
+            isInt(kwargs['nested'][0]) and
+            kwargs['nested'][1] == 'logs'):
+        kwargs['session_id'] = int(kwargs['nested'][0])
+        return controllers._session.logs(kwargs)
+
+    # # GET: /merge_sessions/assignments
+    # if len(kwargs['nested']) == 1 and\
+    #    kwargs['nested'][0] == 'assignments':
+    #     return query_my_assignments(kwargs)
+    return handle_invalid_request(kwargs)
+
