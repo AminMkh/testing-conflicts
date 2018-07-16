@@ -1,29 +1,42 @@
 import logging
-from pathlib import Path
 
 from xmltodict import parse
 
 from helpers.git_cli_client import GitCliClient, GIT_TEMP_DIRECTORY
-from helpers.kdiff3 import KDiff3
 from helpers.requests import response, check_args_have
 from models.data_model import DB_SESSION
 from models.file import update_assignee, File
 from models.session import transform_file
 from models.user import User
-from templates.mail.files import file_assigned
 
 logger = logging.getLogger(__name__)
+
+
+def handle_get_users(kwargs):
+    """
+    Handles {GET} merge_sessions/... requests
+    """
+    # GET: /users
+    if not kwargs['nested'] or not len(kwargs['nested']):
+        return controllers._user.index(kwargs)
+
+    # GET: /users/{user_id}
+    if len(kwargs['nested']) == 1 and \
+            isInt(kwargs['nested'][0]):
+        kwargs['user_id'] = int(kwargs['nested'][0])
+        return controllers._user.show(kwargs)
+
+    # # GET: /merge_sessions/assignments
+    # if len(kwargs['nested']) == 1 and\
+    #    kwargs['nested'][0] == 'assignments':
+    #     return query_my_assignments(kwargs)
+    return handle_invalid_request(kwargs)
 
 
 def assign_file(kwargs):
     """
     Assigns a file to a user
     """
-
-    # Todo: add authorization
-    required_args = ['logged_user', 'session_id', 'file_id', 'user_id']
-    if not check_args_have(kwargs, required_args):
-        return response(400, 'Invalid input')
 
     DB_SESSION.commit()
 
@@ -51,6 +64,7 @@ def show(file_id, session_id, kwargs):
     :param kwargs:
     :return:
     """
+
     DB_SESSION.commit() # to avoid caching
 
     # Todo: add authorization
@@ -62,20 +76,8 @@ def show(file_id, session_id, kwargs):
         .filter(File.session_id == session_id) \
         .one()
 
-    if not record:
-        return response(404, "Not found")
-
-    file = record[0]
-    session = record[1]
-    assignee = record[2]
-
-    # get sources
     base_commit_id = GitCliClient.get_base_commit(session)
     base_commit_id = base_commit_id.decode().rstrip()
-
-    temp_directory = session.containing_dir + "/" + GIT_TEMP_DIRECTORY + "/"
-    new_output_file = temp_directory + file.relative_path + "_A"
-    a = GitCliClient.get_base_file(session, base_commit_id, file.relative_path, new_output_file)
 
     if not a:  # file didn't exist in base branch!
         a = new_output_file
@@ -109,13 +111,4 @@ def show(file_id, session_id, kwargs):
     return response(200, 'OK', result)
 
 
-def xml_to_json(xml_content):
-    try:
-        arr = parse(xml_content)
 
-    except Exception as e:
-        print('error converting from XML to dict')
-        print(str(e))
-        return False
-
-    return arr
