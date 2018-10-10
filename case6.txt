@@ -1,0 +1,152 @@
+  -------------------
+    begin                : Mon Mar 18 2002
+    copyright            : (C) 2002-2007 by Joachim Eibl
+    email                : joachim.eibl at gmx.de
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ ***************************************************************************/
+#include "stable.h"
+
+#include <cstdlib>
+
+#include "diff.h"
+#include "fileaccess.h"
+#include "gnudiff_diff.h"
+#include "options.h"
+#include "progress.h"
+
+#include <kmessagebox.h>
+#include <klocale.h>
+
+#include <QFileInfo>
+#include <QDir>
+#include <QTextCodec>
+#include <QTextStream>
+#include <QProcess>
+
+#include <map>
+#include <assert.h>
+#include <ctype.h>
+#include <iostream>
+using namespace std;
+
+
+int LineData::width(int tabSize) const
+{
+   int w=0;
+   int j=0;
+   for( int i=0; i<size; ++i )
+   {
+      if ( pLine[i]=='\t' )
+      {
+         for(j %= tabSize; j<tabSize; ++j)
+            ++w;
+         j=0;
+      }
+      else
+      {
+         ++w;
+         ++j;
+      }
+   }
+   return w;
+}
+
+
+// The bStrict flag is true during the test where a nonmatching area ends.
+// Then the equal()-function requires that the match has more than 2 nonwhite characters.
+// This is to avoid matches on trivial lines (e.g. with white space only).
+// This choice is good for C/C++.
+bool equal( const LineData& l1, const LineData& l2, bool bStrict )
+{
+   if ( l1.pLine==0 || l2.pLine==0) return false;
+
+   if ( bStrict && g_bIgnoreTrivialMatches )//&& (l1.occurances>=5 || l2.occurances>=5) )
+      return false;
+
+   // Ignore white space diff
+   const QChar* p1 = l1.pLine;
+   const QChar* p1End = p1 + l1.size;
+
+   const QChar* p2 = l2.pLine;
+   const QChar* p2End = p2 + l2.size;
+
+   if ( g_bIgnoreWhiteSpace )
+   {
+      int nonWhite = 0;
+      for(;;)
+      {
+         while( isWhite( *p1 ) && p1!=p1End ) ++p1;
+         while( isWhite( *p2 ) && p2!=p2End ) ++p2;
+
+         if ( p1 == p1End  &&  p2 == p2End )
+         {
+            if ( bStrict && g_bIgnoreTrivialMatches )
+            {  // Then equality is not enough
+               return nonWhite>2;
+            }
+            else  // equality is enough
+               return true;
+         }
+         else if ( p1 == p1End || p2 == p2End )
+            return false;
+
+         if( *p1 != *p2 )
+            return false;
+         ++p1;
+         ++p2;
+         ++nonWhite;
+      }
+   }
+
+   else
+   {
+      if ( l1.size==l2.size && memcmp(p1, p2, l1.size)==0)
+         return true;
+      else
+         return false;
+   }
+}
+
+
+static bool isLineOrBufEnd( const QChar* p, int i, int size )
+{
+   return 
+      i>=size        // End of file
+      || isEndOfLine(p[i])  // Normal end of line
+
+      // No support for Mac-end of line yet, because incompatible with GNU-diff-routines.      
+      // || ( p[i]=='\r' && (i>=size-1 || p[i+1]!='\n') 
+      //                 && (i==0        || p[i-1]!='\n') )  // Special case: '\r' without '\n'
+      ;
+}
+
+
+/* Features of class SourceData:
+- Read a file (from the given URL) or accept data via a string.
+- Allocate and free buffers as necessary.
+- Run a preprocessor, when specified.
+- Run the line-matching preprocessor, when specified.
+- Run other preprocessing steps: Uppercase, ignore comments,
+                                 remove carriage return, ignore numbers.
+
+Order of operation:
+ 1. If data was given via a string then save it to a temp file. (see setData())
+ 2. If the specified file is nonlocal (URL) copy it to a temp file.
+ 3. If a preprocessor was specified, run the input file through it.
+ 4. Read the output of the preprocessor.
+ 5. If Uppercase was specified: Turn the read data to uppercase.
+ 6. Write the result to a temp file.
+ 7. If a line-matching preprocessor was specified, run the temp file through it.
+ 8. Read the output of the line-matching preprocessor.
+ 9. If ignore numbers was specified, strip the LMPP-output of all numbers.
+10. If ignore comments was specified, strip the LMPP-output of comments.
+
+Optimizations: Skip unneeded steps.
