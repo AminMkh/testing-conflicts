@@ -1,0 +1,378 @@
+nes(),
+      m_sd2.getLineDataForDiff(), m_sd2.getSizeLines(),
+      m_sd3.getLineDataForDiff(), m_sd3.getSizeLines() );
+   calcWhiteDiff3Lines( m_diff3LineList, m_sd1.getLineDataForDiff(), m_sd2.getLineDataForDiff(), m_sd3.getLineDataForDiff() );
+   calcDiff3LineVector( m_diff3LineList, m_diff3LineVector );
+
+   // Calc needed lines for display
+   m_neededLines = m_diff3LineList.size();
+
+   QList<int> oldHeights;
+   if ( m_pDirectoryMergeSplitter->isVisible() )
+      oldHeights = m_pMainSplitter->sizes();
+
+   initView();
+
+   if ( m_pDirectoryMergeSplitter->isVisible() )
+   {
+      if (oldHeights.count() < 2)
+         oldHeights.append(0);
+      if (oldHeights[1]==0)    // Distribute the available space evenly between the two widgets.
+      {
+         oldHeights[1] = oldHeights[0]/2;
+         oldHeights[0] -= oldHeights[1];
+      }
+      if ( oldHeights[0]==0 && oldHeights[1]==0 )
+      {
+         oldHeights[1] = 100;
+         oldHeights[0] = 100;
+      }
+      m_pMainSplitter->setSizes( oldHeights );
+   }
+
+   m_pMainWidget->setVisible( bGUI );
+
+   m_bTripleDiff = ! m_sd3.isEmpty();
+
+   m_pMergeResultWindowTitle->setEncodings( m_sd1.getEncoding(), m_sd2.getEncoding(), m_sd3.getEncoding() );
+   if ( ! m_pOptions->m_bAutoSelectOutEncoding )
+      m_pMergeResultWindowTitle->setEncoding( m_pOptions->m_pEncodingOut );
+
+   m_pMergeResultWindowTitle->setLineEndStyles( m_sd1.getLineEndStyle(), m_sd2.getLineEndStyle(), m_sd3.getLineEndStyle() );
+
+   if ( bGUI )
+   {
+      const ManualDiffHelpList* pMDHL = &m_manualDiffHelpList;
+      m_pDiffTextWindow1->init( m_sd1.getAliasName(), m_sd1.getEncoding(), m_sd1.getLineEndStyle(),
+         m_sd1.getLineDataForDisplay(), m_sd1.getSizeLines(), &m_diff3LineVector, pMDHL, m_bTripleDiff );
+      m_pDiffTextWindow2->init( m_sd2.getAliasName(), m_sd2.getEncoding(), m_sd2.getLineEndStyle(),
+         m_sd2.getLineDataForDisplay(), m_sd2.getSizeLines(), &m_diff3LineVector, pMDHL, m_bTripleDiff );
+      m_pDiffTextWindow3->init( m_sd3.getAliasName(), m_sd3.getEncoding(), m_sd3.getLineEndStyle(),
+         m_sd3.getLineDataForDisplay(), m_sd3.getSizeLines(), &m_diff3LineVector, pMDHL, m_bTripleDiff );
+
+      m_pDiffTextWindowFrame3->setVisible(m_bTripleDiff);
+   }
+
+   m_bOutputModified = bVisibleMergeResultWindow;
+
+   m_pMergeResultWindow->init(
+      m_sd1.getLineDataForDisplay(), m_sd1.getSizeLines(),
+      m_sd2.getLineDataForDisplay(), m_sd2.getSizeLines(),
+      m_bTripleDiff ? m_sd3.getLineDataForDisplay() : 0, m_sd3.getSizeLines(),
+      &m_diff3LineList,
+      pTotalDiffStatus      
+      );
+   m_pMergeResultWindowTitle->setFileName( m_outputFilename.isEmpty() ? QString("unnamed.txt") : m_outputFilename );
+
+   if ( !bGUI ) 
+   {
+      // We now have all needed information. The rest below is only for GUI-activation.
+      m_sd1.reset();
+      m_sd2.reset();
+      m_sd3.reset();
+      return;
+   }
+
+   m_pOverview->init(&m_diff3LineList, m_bTripleDiff );
+   m_pDiffVScrollBar->setValue( 0 );
+   m_pHScrollBar->setValue( 0 );
+   m_pMergeVScrollBar->setValue( 0 );
+
+   m_pDiffTextWindow1->setPaintingAllowed( true );
+   m_pDiffTextWindow2->setPaintingAllowed( true );
+   m_pDiffTextWindow3->setPaintingAllowed( true );
+   m_pOverview->setPaintingAllowed( true );
+   m_pMergeResultWindow->setPaintingAllowed( true );
+
+
+   if ( !bVisibleMergeResultWindow )
+      m_pMergeWindowFrame->hide();
+   else
+      m_pMergeWindowFrame->show();
+
+   // Try to create a meaningful but not too long caption
+   if ( !isPart() )
+   {
+      // 1. If the filenames are equal then show only one filename
+      QString caption;
+      QString f1 = m_sd1.getAliasName();
+      QString f2 = m_sd2.getAliasName();
+      QString f3 = m_sd3.getAliasName();
+      int p;
+      if ( (p=f1.indexOf("@@"))>=0 )
+         f1 = f1.left( p );
+      if ( (p=f2.indexOf("@@"))>=0 )
+         f2 = f2.left( p );
+      if ( (p=f3.indexOf("@@"))>=0 )
+         f3 = f3.left( p );
+
+      if ( (p=f1.lastIndexOf('/'))>=0 || (p=f1.lastIndexOf('\\'))>=0 )
+         f1 = f1.mid( p+1 );
+      if ( (p=f2.lastIndexOf('/'))>=0 || (p=f2.lastIndexOf('\\'))>=0)
+         f2 = f2.mid( p+1 );
+      if ( (p=f3.lastIndexOf('/'))>=0 || (p=f3.lastIndexOf('\\'))>=0 )
+         f3 = f3.mid( p+1 );
+
+      if ( !f1.isEmpty() ) 
+      {
+         if ( ( f2.isEmpty() && f3.isEmpty() ) || 
+              (f2.isEmpty() && f1==f3) || ( f3.isEmpty() && f1==f2 ) || (f1==f2 && f1==f3)) 
+            caption = f1;
+      }
+      else if ( ! f2.isEmpty() ) 
+      {
+         if ( f3.isEmpty() || f2==f3 ) 
+            caption = f2;
+      }
+      else if ( ! f3.isEmpty() ) 
+         caption = f3;
+
+      // 2. If the files don't have the same name then show all names
+      if ( caption.isEmpty() && (!f1.isEmpty() || !f2.isEmpty() || !f3.isEmpty()) )
+      {
+         caption = ( f1.isEmpty()? QString("") : f1 );
+         caption += QString(caption.isEmpty() || f2.isEmpty() ? "" : " <-> ") + ( f2.isEmpty()? QString("") : f2 );
+         caption += QString(caption.isEmpty() || f3.isEmpty() ? "" : " <-> ") + ( f3.isEmpty()? QString("") : f3 ) ;
+      }
+
+      m_pKDiff3Shell->setWindowTitle( caption.isEmpty() ? QString("KDiff3") : caption+QString(" - KDiff3"));
+   }
+
+   //initialize wheel tracking to zero
+   m_iCumulativeWheelDelta = 0;
+
+   m_bFinishMainInit = true; // call slotFinishMainInit after finishing the word wrap
+   m_bLoadFiles = bLoadFiles;
+   postRecalcWordWrap();
+}
+
+
+void KDiff3App::setHScrollBarRange()
+{
+   int w1 = m_pDiffTextWindow1!=0 && m_pDiffTextWindow1->isVisible() ? m_pDiffTextWindow1->getMaxTextWidth() : 0;
+   int w2 = m_pDiffTextWindow2!=0 && m_pDiffTextWindow2->isVisible() ? m_pDiffTextWindow2->getMaxTextWidth() : 0;
+   int w3 = m_pDiffTextWindow3!=0 && m_pDiffTextWindow3->isVisible() ? m_pDiffTextWindow3->getMaxTextWidth() : 0;
+
+   int wm = m_pMergeResultWindow!=0 && m_pMergeResultWindow->isVisible() ? m_pMergeResultWindow->getMaxTextWidth() : 0;
+
+   int v1 = m_pDiffTextWindow1!=0 && m_pDiffTextWindow1->isVisible() ? m_pDiffTextWindow1->getVisibleTextAreaWidth() : 0;
+   int v2 = m_pDiffTextWindow2!=0 && m_pDiffTextWindow2->isVisible() ? m_pDiffTextWindow2->getVisibleTextAreaWidth() : 0;
+   int v3 = m_pDiffTextWindow3!=0 && m_pDiffTextWindow3->isVisible() ? m_pDiffTextWindow3->getVisibleTextAreaWidth() : 0;
+   int vm = m_pMergeResultWindow!=0 && m_pMergeResultWindow->isVisible() ? m_pMergeResultWindow->getVisibleTextAreaWidth() : 0;
+
+   // Find the minimum, but don't consider 0.
+   int pageStep = 0;
+   if ( (pageStep==0 || pageStep>v1) && v1>0 )
+      pageStep = v1;
+   if ( (pageStep==0 || pageStep>v2) && v2>0  )
+      pageStep = v2;
+   if ( (pageStep==0 || pageStep>v3) && v3>0  )
+      pageStep = v3;
+   if ( (pageStep==0 || pageStep>vm) && vm>0  )
+      pageStep = vm;
+
+   int rangeMax = 0;
+   if ( w1>v1 && w1-v1>rangeMax && v1>0 )
+      rangeMax = w1-v1;
+   if ( w2>v2 && w2-v2>rangeMax && v2>0 )
+      rangeMax = w2-v2;
+   if ( w3>v3 && w3-v3>rangeMax && v3>0 )
+      rangeMax = w3-v3;
+   if ( wm>vm && wm-vm>rangeMax && vm>0 )
+      rangeMax = wm-vm;
+
+   m_pHScrollBar->setRange(0, rangeMax );
+   m_pHScrollBar->setPageStep( pageStep );
+}
+
+void KDiff3App::resizeDiffTextWindowHeight(int newHeight)
+{
+   m_DTWHeight = newHeight;
+
+   m_pDiffVScrollBar->setRange(0, max2(0, m_neededLines+1 - newHeight) );
+   m_pDiffVScrollBar->setPageStep( newHeight );
+   m_pOverview->setRange( m_pDiffVScrollBar->value(), m_pDiffVScrollBar->pageStep() );
+
+   setHScrollBarRange();
+}
+
+void KDiff3App::resizeMergeResultWindow()
+{
+   MergeResultWindow* p = m_pMergeResultWindow;
+   m_pMergeVScrollBar->setRange(0, max2(0, p->getNofLines() - p->getNofVisibleLines()) );
+   m_pMergeVScrollBar->setPageStep( p->getNofVisibleLines() );
+
+   setHScrollBarRange();
+}
+
+void KDiff3App::scrollDiffTextWindow( int deltaX, int deltaY )
+{
+   if ( deltaY!= 0 )
+   {
+      m_pDiffVScrollBar->setValue( m_pDiffVScrollBar->value() + deltaY );
+      m_pOverview->setRange( m_pDiffVScrollBar->value(), m_pDiffVScrollBar->pageStep() );
+   }
+   if ( deltaX!= 0)
+      m_pHScrollBar->QScrollBar::setValue( m_pHScrollBar->value() + deltaX );
+}
+
+void KDiff3App::scrollMergeResultWindow( int deltaX, int deltaY )
+{
+   if ( deltaY!= 0 )
+      m_pMergeVScrollBar->setValue( m_pMergeVScrollBar->value() + deltaY );
+   if ( deltaX!= 0)
+      m_pHScrollBar->setValue( m_pHScrollBar->value() + deltaX );
+}
+
+void KDiff3App::setDiff3Line( int line )
+{
+   m_pDiffVScrollBar->setValue( line );
+}
+
+void KDiff3App::sourceMask( int srcMask, int enabledMask )
+{
+   chooseA->blockSignals(true);
+   chooseB->blockSignals(true);
+   chooseC->blockSignals(true);
+   chooseA->setChecked( (srcMask & 1) != 0 );
+   chooseB->setChecked( (srcMask & 2) != 0 );
+   chooseC->setChecked( (srcMask & 4) != 0 );
+   chooseA->blockSignals(false);
+   chooseB->blockSignals(false);
+   chooseC->blockSignals(false);
+   chooseA->setEnabled( (enabledMask & 1) != 0 );
+   chooseB->setEnabled( (enabledMask & 2) != 0 );
+   chooseC->setEnabled( (enabledMask & 4) != 0 );
+}
+
+
+
+// Function uses setMinSize( sizeHint ) before adding the widget.
+// void addWidget(QBoxLayout* layout, QWidget* widget);
+template <class W, class L>
+void addWidget( L* layout, W* widget)
+{
+   QSize s = widget->sizeHint();
+   widget->setMinimumSize( QSize(max2(s.width(),0),max2(s.height(),0) ) );
+   layout->addWidget( widget );
+}
+
+void KDiff3App::initView()
+{
+   // set the main widget here
+   if ( m_pMainWidget != 0 )
+   {
+      return;
+      //delete m_pMainWidget;
+   }
+   m_pMainWidget = new QWidget(); // Contains vertical splitter and horiz scrollbar   
+   m_pMainSplitter->addWidget( m_pMainWidget );
+   m_pMainWidget->setObjectName("MainWidget");
+   QVBoxLayout* pVLayout = new QVBoxLayout(m_pMainWidget);
+   pVLayout->setMargin(0);
+   pVLayout->setSpacing(0);
+
+   QSplitter* pVSplitter = new QSplitter();
+   pVSplitter->setObjectName("VSplitter");
+   pVSplitter->setOpaqueResize(false);
+   pVSplitter->setOrientation( Qt::Vertical );
+   pVLayout->addWidget( pVSplitter );
+
+   QWidget* pDiffWindowFrame = new QWidget(); // Contains diff windows, overview and vert scrollbar
+   pDiffWindowFrame->setObjectName("DiffWindowFrame");
+   QHBoxLayout* pDiffHLayout = new QHBoxLayout( pDiffWindowFrame );
+   pDiffHLayout->setMargin(0);
+   pDiffHLayout->setSpacing(0);
+   pVSplitter->addWidget(pDiffWindowFrame);
+
+   m_pDiffWindowSplitter = new QSplitter();
+   m_pDiffWindowSplitter->setObjectName("DiffWindowSplitter");
+   m_pDiffWindowSplitter->setOpaqueResize(false);
+
+   m_pDiffWindowSplitter->setOrientation( m_pOptions->m_bHorizDiffWindowSplitting ?  Qt::Horizontal : Qt::Vertical );
+   pDiffHLayout->addWidget( m_pDiffWindowSplitter );
+
+   m_pOverview = new Overview( &m_pOptionDialog->m_options );
+   m_pOverview->setObjectName("Overview");
+   pDiffHLayout->addWidget(m_pOverview);
+   connect( m_pOverview, SIGNAL(setLine(int)), this, SLOT(setDiff3Line(int)) );
+
+   m_pDiffVScrollBar = new QScrollBar( Qt::Vertical, pDiffWindowFrame );
+   pDiffHLayout->addWidget( m_pDiffVScrollBar );
+
+   m_pDiffTextWindowFrame1 = new DiffTextWindowFrame( m_pDiffWindowSplitter, statusBar(), &m_pOptionDialog->m_options, 1, &m_sd1);
+   m_pDiffWindowSplitter->addWidget(m_pDiffTextWindowFrame1);
+   m_pDiffTextWindowFrame2 = new DiffTextWindowFrame( m_pDiffWindowSplitter, statusBar(), &m_pOptionDialog->m_options, 2, &m_sd2);
+   m_pDiffWindowSplitter->addWidget(m_pDiffTextWindowFrame2);
+   m_pDiffTextWindowFrame3 = new DiffTextWindowFrame( m_pDiffWindowSplitter, statusBar(), &m_pOptionDialog->m_options, 3, &m_sd3);
+   m_pDiffWindowSplitter->addWidget(m_pDiffTextWindowFrame3);
+   m_pDiffTextWindow1 = m_pDiffTextWindowFrame1->getDiffTextWindow();
+   m_pDiffTextWindow2 = m_pDiffTextWindowFrame2->getDiffTextWindow();
+   m_pDiffTextWindow3 = m_pDiffTextWindowFrame3->getDiffTextWindow();
+   connect(m_pDiffTextWindowFrame1, SIGNAL(fileNameChanged(const QString&,int)), this, SLOT(slotFileNameChanged(const QString&,int)));
+   connect(m_pDiffTextWindowFrame2, SIGNAL(fileNameChanged(const QString&,int)), this, SLOT(slotFileNameChanged(const QString&,int)));
+   connect(m_pDiffTextWindowFrame3, SIGNAL(fileNameChanged(const QString&,int)), this, SLOT(slotFileNameChanged(const QString&,int)));
+
+   connect(m_pDiffTextWindowFrame1, SIGNAL(encodingChanged(QTextCodec*)), this, SLOT(slotEncodingChangedA(QTextCodec*)));
+   connect(m_pDiffTextWindowFrame2, SIGNAL(encodingChanged(QTextCodec*)), this, SLOT(slotEncodingChangedB(QTextCodec*)));
+   connect(m_pDiffTextWindowFrame3, SIGNAL(encodingChanged(QTextCodec*)), this, SLOT(slotEncodingChangedC(QTextCodec*)));
+
+   // Merge window
+   m_pMergeWindowFrame = new QWidget( pVSplitter );
+   m_pMergeWindowFrame->setObjectName("MergeWindowFrame");
+   pVSplitter->addWidget(m_pMergeWindowFrame);
+   QHBoxLayout* pMergeHLayout = new QHBoxLayout( m_pMergeWindowFrame );
+   pMergeHLayout->setMargin(0);
+   pMergeHLayout->setSpacing(0);
+   QVBoxLayout* pMergeVLayout = new QVBoxLayout();
+   pMergeHLayout->addLayout( pMergeVLayout, 1 );
+
+   m_pMergeResultWindowTitle = new WindowTitleWidget(&m_pOptionDialog->m_options);
+   pMergeVLayout->addWidget( m_pMergeResultWindowTitle );
+
+   m_pMergeResultWindow = new MergeResultWindow( m_pMergeWindowFrame, &m_pOptionDialog->m_options, statusBar() );
+   pMergeVLayout->addWidget( m_pMergeResultWindow, 1 );
+
+   m_pMergeVScrollBar = new QScrollBar( Qt::Vertical, m_pMergeWindowFrame );
+   pMergeHLayout->addWidget( m_pMergeVScrollBar );
+
+   m_pMainSplitter->addWidget(m_pMainWidget);
+
+   autoAdvance->setEnabled(true);
+
+   QList<int> sizes = pVSplitter->sizes();
+   int total = sizes[0] + sizes[1];
+   if ( total<10 )
+      total = 100;
+   sizes[0]=total/2; sizes[1]=total/2;
+   pVSplitter->setSizes( sizes );
+
+   QList<int> hSizes;
+   hSizes << 1 << 1 << 1;
+   m_pDiffWindowSplitter->setSizes( hSizes );
+   
+   m_pMergeResultWindow->installEventFilter( this );       // for Cut/Copy/Paste-shortcuts
+   m_pMergeResultWindow->installEventFilter( m_pMergeResultWindowTitle ); // for focus tracking
+
+   QHBoxLayout* pHScrollBarLayout = new QHBoxLayout();
+   pVLayout->addLayout( pHScrollBarLayout );
+   m_pHScrollBar = new ReversibleScrollBar( Qt::Horizontal, &m_pOptions->m_bRightToLeftLanguage );
+   pHScrollBarLayout->addWidget( m_pHScrollBar );
+   m_pCornerWidget = new QWidget( m_pMainWidget );
+   pHScrollBarLayout->addWidget( m_pCornerWidget );
+
+
+   connect( m_pDiffVScrollBar, SIGNAL(valueChanged(int)), m_pOverview, SLOT(setFirstLine(int)));
+   connect( m_pDiffVScrollBar, SIGNAL(valueChanged(int)), m_pDiffTextWindow1, SLOT(setFirstLine(int)));
+   connect( m_pHScrollBar, SIGNAL(valueChanged2(int)), m_pDiffTextWindow1, SLOT(setHorizScrollOffset(int)));
+   connect( m_pDiffTextWindow1, SIGNAL(newSelection()), this, SLOT(slotSelectionStart()));
+   connect( m_pDiffTextWindow1, SIGNAL(selectionEnd()), this, SLOT(slotSelectionEnd()));
+   connect( m_pDiffTextWindow1, SIGNAL(scroll(int,int)), this, SLOT(scrollDiffTextWindow(int,int)));
+   m_pDiffTextWindow1->installEventFilter( this );
+
+   connect( m_pDiffVScrollBar, SIGNAL(valueChanged(int)), m_pDiffTextWindow2, SLOT(setFirstLine(int)));
+   connect( m_pHScrollBar, SIGNAL(valueChanged2(int)), m_pDiffTextWindow2, SLOT(setHorizScrollOffset(int)));
+   connect( m_pDiffTextWindow2, SIGNAL(newSelection()), this, SLOT(slotSelectionStart()));
+   connect( m_pDiffTextWindow2, SIGNAL(selectionEnd()), this, SLOT(slotSelectionEnd()));
+   connect( m_pDiffTextWindow2, SIGNAL(scroll(int,int)), this, SLOT(scrollDiffTextWindow(int,int)));
+   m_pDiffTextWindow2->installEventFilter( this );
